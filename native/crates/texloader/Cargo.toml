@@ -1,0 +1,30 @@
+[package]
+name = "texloader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The `texloader` mod's extension module: `texloader/_texloader.pyd`.
+# Textures only. The pyfunction surface lives in `py-textures`; like
+# `textures`, it reaches the already-loaded `unrealsdk.dll` through
+# `unrealsdk-rs` at runtime.
+
+[lib]
+name = "_texloader"
+# rlib alongside cdylib so the stub_gen binary (and tests) can link the
+# crate; the shipped artifact stays the cdylib (`texloader/_texloader.pyd`).
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+py-textures.workspace = true
+textures.workspace = true
+# No `extension-module` feature (deprecated in favour of the
+# `PYO3_BUILD_EXTENSION_MODULE` env var): `build_mod.py` sets it for the
+# pyd, and leaving the feature off lets `stub_gen` build as a plain host
+# binary that links libpython (`scripts/build_mod.py` drops the env var for
+# that step). The Windows pyd link is raw-dylib either way.
+pyo3 = { workspace = true, features = ["abi3-py314", "generate-import-lib"] }
+pyo3-stub-gen = "0.23"
+
+[lints]
+workspace = true

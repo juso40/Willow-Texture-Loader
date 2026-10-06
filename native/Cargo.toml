@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/py-textures",
+    "crates/textures",
+    "crates/texloader",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/juso40/texloader"
+
+[workspace.dependencies]
+unrealsdk-rs = { git = "https://github.com/juso40/unrealsdk-rs.git", tag = "v0.1.0" }
+
+py-textures = { path = "crates/py-textures" }
+textures = { path = "crates/textures" }
+texloader = { path = "crates/texloader" }
+pyo3 = "0.29"
+log = { version = "0.4", features = ["std"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+fast_image_resize = { version = "6.1.0", features = ["only_u8x4", "image"] }
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+dbg_macro = "deny"
+todo = "warn"
+case_sensitive_file_extension_comparisons = "warn"
+unwrap_used = "deny"

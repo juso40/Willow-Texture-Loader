@@ -1,0 +1,27 @@
+[package]
+name = "py-textures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The shared PyO3 texture surface: the `#[pyfunction]`s + pyo3-stub-gen
+# metadata used by the extension module (`texloader._texloader`). The
+# engine/decode logic stays Python-free in `textures`; this crate only
+# marshals and renders docstrings.
+#
+# `wrap_pyfunction!` accepts functions defined here from the consumer crate,
+# and `inventory` (pyo3-stub-gen) collects the submissions into whichever
+# binary links this crate — so the module's `.pyi` lists exactly the surface
+# it exposes.
+
+[dependencies]
+textures.workspace = true
+# No `extension-module` feature here either (see texloader's Cargo.toml:
+# the pyd build uses the `PYO3_BUILD_EXTENSION_MODULE` env var instead).
+pyo3 = { workspace = true, features = ["abi3-py314", "generate-import-lib"] }
+pyo3-stub-gen = "0.23"
+unrealsdk-rs = { workspace = true }
+
+
+[lints]
+workspace = true

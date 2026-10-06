@@ -1,0 +1,19 @@
+[package]
+name = "textures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Runtime texture loading for the game: decode PNG/JPEG, build a BGRA mip
+# chain in pure Rust (unit-tested off-game), then build/patch a UE3
+# `Texture2D` through `unrealsdk-rs` on the game thread. Python-free — the
+# pyo3 surface lives in `py-textures`, like every other crate here.
+
+[dependencies]
+unrealsdk-rs.workspace = true
+log.workspace = true
+image.workspace = true
+fast_image_resize.workspace = true
+
+[lints]
+workspace = true

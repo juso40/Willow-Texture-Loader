@@ -1,0 +1,15 @@
+[project]
+name = "texloader"
+version = "1.0"
+authors = [{ name = "juso" }]
+description = """\
+Runtime texture loading for Borderlands 2: load arbitrary PNG/JPEG images \
+as real Texture2D objects.
+"""
+
+
+[tool.sdkmod]
+name = "texloader"
+license = { name = "MIT", url = "https://choosealicense.com/licenses/mit/" }
+download = "https://github.com/juso40/texloader/raw/refs/heads/master/texloader.zip"
+supported_games = ["BL2"]

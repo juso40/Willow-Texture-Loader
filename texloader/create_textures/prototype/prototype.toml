@@ -1,0 +1,30 @@
+# Texloader manifest. Only "image" and "name" are required.
+# Every other key falls back to the default shown below
+# (drop the whole [texture] table and you get exactly those).
+image = "prototype.png"
+name = "prototype"
+outer = "Transient"              # outer object (optional, defaults to "Transient" if not specified)
+
+# Optional [texture] table overrides the default texture settings.
+[texture]
+mips = true                     # full mip chain (false = mip 0 only)
+flip = false                    # mirror the art vertically at load
+srgb = true                     # interpret the art as sRGB (UI/albedo, set to false for normal/comp maps)
+filter = "linear"               # "linear" or "nearest" (pixel art)
+address = "clamp"               # "wrap", "clamp" or "mirror"
+tiling = true                   # true for tileable art (pairs with wrap)
+
+# Per-axis addressing, overrides `address` on one axis
+# (the engine keeps AddressX/AddressY separate):
+# address_x = "clamp"
+# address_y = "clamp"
+
+# Actually not sure how or if it is used, but it is passed to the engine.
+# If unsure, remove the line simply!
+lod_group = "world"              # any `Engine.Texture:TextureGroup`: "ui", "world", "effects", ...
+
+
+# Max resolution for either axis is 2048, if the image is larger in any dimension
+# it will be scaled down to fit, preserving aspect ratio.
+# Since the game is 32bit and these textures are always loaded, memory is sparse!
+# So please avoid adding larger than necessary textures.
