@@ -13,4 +13,4 @@ name = "texloader"
 license = { name = "MIT", url = "https://choosealicense.com/licenses/mit/" }
 download = "https://github.com/juso40/Willow-Texture-Loader/raw/refs/heads/main/texloader.zip"
 supported_games = ["BL2"]
-use_native_modules = true
+uses_native_modules = true
