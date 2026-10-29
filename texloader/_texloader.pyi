@@ -11,7 +11,7 @@ __all__ = [
     "unload_texture",
 ]
 
-def load_image(path: builtins.str, name: builtins.str, outer: typing.Optional[builtins.str] = None, mips: builtins.bool = True, srgb: builtins.bool = True, flip: builtins.bool = False, tiling: builtins.bool = False, address_x: typing.Optional[builtins.str] = None, address_y: typing.Optional[builtins.str] = None, filter: typing.Optional[builtins.str] = None, lod_group: typing.Optional[builtins.str] = None) -> builtins.str:
+def load_image(path: builtins.str, name: builtins.str, outer: typing.Optional[builtins.str] = None, mips: builtins.bool = True, srgb: builtins.bool = True, flip: builtins.bool = False, tiling: builtins.bool = False, address_x: typing.Optional[builtins.str] = None, address_y: typing.Optional[builtins.str] = None, filter: typing.Optional[builtins.str] = None, lod_group: typing.Optional[builtins.str] = None, compression: builtins.str = 'none') -> builtins.str:
     r"""
     Loads an image file (PNG or JPEG) as a new `Texture2D` and returns its
     full object path (e.g. `"Transient.MyMod.logo"` — resolve it with
@@ -26,25 +26,28 @@ def load_image(path: builtins.str, name: builtins.str, outer: typing.Optional[bu
     entry (`"ui"`, `"effects"`, …) resolved through the engine's own enum,
     `None` leaves the engine default; `flip` mirrors the source art
     vertically at load; `tiling` clears the engine's `bNoTiling` hint for
-    wrap-style art. Images larger than 2048px in either dimension are
-    downscaled (aspect-preserving) with a log note.
+    wrap-style art. Images larger than 8192px in either dimension are
+    downscaled (aspect-preserving) with a log note. `compression` defaults
+    to `"none"` (BGRA), `"bc1"`/`"dxt1"` uploads lossy BC1 blocks with one-bit
+    alpha and rounds top-mip dimensions up to multiples of four.
     """
 
-def load_image_bytes(data: typing.Sequence[builtins.int], name: builtins.str, outer: typing.Optional[builtins.str] = None, mips: builtins.bool = True, srgb: builtins.bool = True, flip: builtins.bool = False, tiling: builtins.bool = False, address_x: typing.Optional[builtins.str] = None, address_y: typing.Optional[builtins.str] = None, filter: typing.Optional[builtins.str] = None, lod_group: typing.Optional[builtins.str] = None) -> builtins.str:
+def load_image_bytes(data: typing.Sequence[builtins.int], name: builtins.str, outer: typing.Optional[builtins.str] = None, mips: builtins.bool = True, srgb: builtins.bool = True, flip: builtins.bool = False, tiling: builtins.bool = False, address_x: typing.Optional[builtins.str] = None, address_y: typing.Optional[builtins.str] = None, filter: typing.Optional[builtins.str] = None, lod_group: typing.Optional[builtins.str] = None, compression: builtins.str = 'none') -> builtins.str:
     r"""
     Like [`load_image`] for in-memory image bytes (PNG or JPEG).
     """
 
-def load_image_bytes_into(data: typing.Sequence[builtins.int], target: builtins.str, mips: builtins.bool = True) -> builtins.str:
+def load_image_bytes_into(data: typing.Sequence[builtins.int], target: builtins.str, mips: builtins.bool = True, compression: builtins.str = 'none') -> builtins.str:
     r"""
     Like [`load_image_into`] for in-memory image bytes.
     """
 
-def load_image_into(path: builtins.str, target: builtins.str, mips: builtins.bool = True) -> builtins.str:
+def load_image_into(path: builtins.str, target: builtins.str, mips: builtins.bool = True, compression: builtins.str = 'none') -> builtins.str:
     r"""
     Replaces an existing texture's content: decodes `path` (PNG or JPEG) and
     swaps it into the `Texture2D` at `target` (full object path).
-    Always uploads BGRA (the target's format property may be changed).
+    Uploads BGRA by default, or BC1/DXT1 with `compression="bc1"` (the
+    target's format property is changed to match the payload).
     """
 
 def unload_texture(path: builtins.str) -> builtins.bool:

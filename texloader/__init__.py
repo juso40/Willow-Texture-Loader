@@ -7,12 +7,13 @@ from texloader.api import (
     load_into,
     unload,
 )
-from texloader.auto_create import create_texture_for_manifest, load_manifests
+from texloader.auto_create import create_texture_for_manifest, load_from_manifest, load_manifests
 
 __all__ = [
     "load",
     "load_bytes",
     "load_bytes_into",
+    "load_from_manifest",
     "load_into",
     "unload",
 ]

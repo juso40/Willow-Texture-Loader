@@ -44,6 +44,7 @@ outer = "Transient"              # outer object (optional, defaults to "Transien
 # Optional [texture] table overrides the default texture settings.
 [texture]
 mips = true                     # full mip chain (false = mip 0 only)
+compression = "none"            # "none" (BGRA8) or "bc1" ("dxt1" alias, lossy/one-bit alpha)
 flip = false                    # mirror the art vertically at load
 srgb = true                     # interpret the art as sRGB (UI/albedo, set to false for normal/comp maps)
 filter = "linear"               # "linear" or "nearest" (pixel art)
@@ -64,12 +65,71 @@ The `Texture2D` created for this specific example will be created as `Texture2D'
 ### For Python Developers
 You can obviously use the same method to create textures as the `blcm` modders, by using the `create_textures` folder method.
 
-But for programmatically created textures or manual texture lifetime management, you can use the `load`/`load_into`/`unload` functions provided by this mod.
+To load a manifest bundled with your own mod, use `load_from_manifest`. You do not
+need to copy the manifest or its images into texloader's `create_textures` folder:
+
+```python
+from pathlib import Path
+
+import unrealsdk
+from texloader import load_from_manifest, unload
+
+# For example: my_mod/textures/logo.toml and my_mod/textures/logo.png.
+manifest_path = Path(__file__).resolve().parent / "textures" / "logo.toml"
+texture_path = load_from_manifest(manifest_path)  # accepts an absolute str or Path
+texture = unrealsdk.find_object("Texture2D", texture_path)
+
+# When your mod no longer needs the texture:
+# unload(texture_path)
+```
+
+The manifest uses the same schema shown above. Relative `image` paths are resolved
+against the TOML file's directory, not the working directory. The function returns
+the created texture's full object path, just like `load`. Unreadable or invalid
+manifests raise `ValueError` with details logged.
+Created textures remain GC immune until `unload` is called.
+
+For programmatically created textures or manual texture lifetime management, you can
+also use the `load`/`load_into`/`unload` functions provided by this mod.
 
 
-## Notes
-Texture resolution is limited to 2048px in either dimension. Larger textures will automatically be scaled down to fit.  
-(This is an arbitrary limit by me, the game seems to support up to 8192px in either dimension, but since its only 32bit we are limited on the available memory.)    
-I decided to limit it to 2048px, as this mod only supports RGBA textures, that means 4bytes per pixel, since we don't use compression. 
-So a 2048px texture takes up 16MB!!! of memory (2048 * 2048 * 4 = 16,777,216 bytes).   
-(If mips are enabled, the texture will even take up more memory...)
+### BC1 / DXT1 compression
+
+To reduce resident texture memory, opt into BC1 encoding in the manifest:
+
+```toml
+image = "background.png"
+name = "background"
+
+[texture]
+compression = "bc1"
+```
+
+Or use the Python API:
+
+```python
+from texloader import load
+
+texture_path = load("/absolute/path/to/background.png", compression="bc1")
+```
+
+`load_bytes`, `load_into`, and `load_bytes_into` also accept `compression`.
+`"dxt1"` is an alias for `"bc1"`. `"none"` is the default without compression.
+External manifests loaded with `load_from_manifest` support the same setting.
+
+BC1 encodes every mip as DXT1 blocks and sets the engine format to `PF_DXT1`.
+Both the engine's resident bulk-data buffers and GPU upload use compressed data,
+not BGRA buffers with a compression flag. Large mips use **one-eighth** the
+uncompressed pixel storage: a 8192x8192 top mip is **32 MiB** instead of **256 MiB**!
+Decoding and mip generation still use temporary uncompressed memory during loading.
+
+Trade-offs:
+- BC1 is lossy and can introduce colour/block artifacts, especially in UI art.
+- Alpha is one-bit (transparent or opaque). Smooth transparency is lost.
+  Keep `compression = "none"` for soft shadows,
+  gradients, and other smoothly transparent textures.
+- For D3D9 compatibility, top-mip dimensions are rounded up to multiples of four
+  (minimum 4x4) by resizing the image. Tiny tail mips still store
+  at least one complete eight-byte block.
+- Compression adds one-time CPU work when loading. The resulting texture stays
+  compressed while resident in the engine.

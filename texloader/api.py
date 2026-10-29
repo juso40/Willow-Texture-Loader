@@ -74,6 +74,7 @@ def load(  # noqa: PLR0913
     tiling: bool = False,
     filter: str = "linear",  # noqa: A002
     lod_group: str | None = None,
+    compression: str = "none",
 ) -> str:
     """Load an image file (PNG or JPEG) as a new `Texture2D`.
 
@@ -96,7 +97,12 @@ def load(  # noqa: PLR0913
       ...) resolved through the engine's own enum; `None` (default) leaves
       the engine's.
 
-    Sources larger than 2048px in either dimension are downscaled
+    - `compression`: `"none"` (default, BGRA8) or `"bc1"` (`"dxt1"` alias).
+      BC1 is lossy, stores one bit of alpha, and uses eight bytes per 4x4
+      block (about 8x smaller than BGRA). Top-mip dimensions are rounded
+      up to multiples of four with a resize note. Use `"none"` for smooth alpha.
+
+    Sources larger than 8192px in either dimension are downscaled
     (aspect-preserving) with a log note.
     Textures are GC immune, call `unload` to release one.
     """
@@ -113,6 +119,7 @@ def load(  # noqa: PLR0913
         axis_y,
         filter,
         lod_group,
+        compression,
     )
 
 
@@ -130,6 +137,7 @@ def load_bytes(  # noqa: PLR0913
     tiling: bool = False,
     filter: str = "linear",  # noqa: A002
     lod_group: str | None = None,
+    compression: str = "none",
 ) -> str:
     """Like `load` but for in-memory image bytes (PNG or JPEG)."""
     axis_x, axis_y = _resolve_address(address, address_x, address_y)
@@ -145,21 +153,36 @@ def load_bytes(  # noqa: PLR0913
         axis_y,
         filter,
         lod_group,
+        compression,
     )
 
 
-def load_into(path: str | Path, target: ObjectLike, *, mips: bool = True) -> str:
+def load_into(
+    path: str | Path,
+    target: ObjectLike,
+    *,
+    mips: bool = True,
+    compression: str = "none",
+) -> str:
     """Replace an existing texture's content with an image file.
 
     `target` is the games texture itself or its full object path.
     Materials referencing the texture may need rebinding.
+    `compression` uses the same options as `load`; the target's pixel
+    format is changed to match the uploaded data.
     """
-    return _texloader.load_image_into(str(path), _object_path(target), mips)
+    return _texloader.load_image_into(str(path), _object_path(target), mips, compression)
 
 
-def load_bytes_into(data: bytes, target: ObjectLike, *, mips: bool = True) -> str:
+def load_bytes_into(
+    data: bytes,
+    target: ObjectLike,
+    *,
+    mips: bool = True,
+    compression: str = "none",
+) -> str:
     """Like `load_into` for in-memory image bytes."""
-    return _texloader.load_image_bytes_into(data, _object_path(target), mips)
+    return _texloader.load_image_bytes_into(data, _object_path(target), mips, compression)
 
 
 def unload(path: ObjectLike) -> bool:

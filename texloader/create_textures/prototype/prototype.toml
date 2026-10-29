@@ -24,7 +24,7 @@ tiling = true                   # true for tileable art (pairs with wrap)
 lod_group = "world"              # any `Engine.Texture:TextureGroup`: "ui", "world", "effects", ...
 
 
-# Max resolution for either axis is 2048, if the image is larger in any dimension
+# Max resolution for either axis is 8192px, if the image is larger in any dimension
 # it will be scaled down to fit, preserving aspect ratio.
 # Since the game is 32bit and these textures are always loaded, memory is sparse!
 # So please avoid adding larger than necessary textures.

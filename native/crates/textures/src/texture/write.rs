@@ -89,8 +89,7 @@ pub(crate) unsafe fn write_mips_indirect(
 ) -> Result<(), TextureError> {
     let vtable = mip_block_vtable(tex).ok_or_else(|| {
         TextureError::NotFound(
-            "No live Texture2D with mips to copy the mip-block vtable from!"
-                .to_owned(),
+            "No live Texture2D with mips to copy the mip-block vtable from!".to_owned(),
         )
     })?;
     let count = chain.len() as i32;
@@ -101,18 +100,18 @@ pub(crate) unsafe fn write_mips_indirect(
     for (i, mip) in chain.iter().enumerate() {
         let block = EngineBuffer::alloc(MipBlock::SIZE)
             .map_err(|e| TextureError::Engine(format!("failed to allocate a mip block: {e}")))?;
-        let pixels = EngineBuffer::alloc(mip.bgra.len())
+        let pixels = EngineBuffer::alloc(mip.data.len())
             .map_err(|e| TextureError::Engine(format!("failed to allocate a mip payload: {e}")))?
             .release();
         // SAFETY: `block` is a zeroed engine allocation of `MipBlock::SIZE`
-        // bytes; `pixels` is engine-heap of `mip.bgra.len()` bytes. The
+        // bytes. `pixels` is engine-heap of `mip.data.len()` bytes. The
         // field values reproduce the engine's own `UTexture2D::Init` mip
         // state (documented on `MipBlock::init`).
         unsafe {
             MipBlock::from_raw(block.as_mut_ptr()).init(
                 vtable,
                 pixels,
-                &mip.bgra,
+                &mip.data,
                 mip.width as i32,
                 mip.height as i32,
             );

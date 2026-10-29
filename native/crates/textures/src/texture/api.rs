@@ -9,7 +9,7 @@ use unrealsdk_rs::objects::{
 use unrealsdk_rs::types::{UClass, UObject};
 
 use crate::error::TextureError;
-use crate::img::Mip;
+use crate::img::{Compression, Mip, validate_chain};
 use crate::names::sanitize_name;
 use crate::ue::enums::resolve_texture_group;
 use crate::ue::flags::{TA_CLAMP, TA_MIRROR, TA_WRAP, TF_LINEAR, TF_NEAREST};
@@ -123,6 +123,8 @@ pub struct CreateOptions {
     pub srgb: bool,
     /// Generate a full mip chain (else a single mip).
     pub mips: bool,
+    /// Mip storage: uncompressed BGRA (default) or BC1/DXT1.
+    pub compression: Compression,
     /// Edge addressing of the X axis (`AddressX`).
     pub address_x: AddressMode,
     /// Edge addressing of the Y axis (`AddressY`).
@@ -147,6 +149,7 @@ impl Default for CreateOptions {
             outer: None,
             srgb: true,
             mips: true,
+            compression: Compression::default(),
             address_x: AddressMode::default(),
             address_y: AddressMode::default(),
             flip: false,
@@ -187,6 +190,12 @@ pub(crate) fn require_texture2d(path: &str) -> Result<Obj, TextureError> {
 pub fn create_texture(opts: &CreateOptions, chain: &[Mip]) -> Result<LoadedTexture, TextureError> {
     if chain.is_empty() {
         return Err(TextureError::NoMips);
+    }
+    validate_chain(chain).map_err(TextureError::InvalidInput)?;
+    if chain[0].compression != opts.compression {
+        return Err(TextureError::InvalidInput(
+            "mip encoding does not match creation options".to_owned(),
+        ));
     }
     let cls = texture2d_class()?;
 
@@ -256,12 +265,13 @@ pub fn create_texture(opts: &CreateOptions, chain: &[Mip]) -> Result<LoadedTextu
 }
 
 /// Replace the mip chain (and sizes/format) of an existing `Texture2D`.
-/// We always uploads BGRA, so any Texture with a cooked format (DXT1/DXT5/…)
-/// reads from our new data after only after its next `UpdateResource`.
+/// The format is set to match the supplied BGRA or BC1 payloads before
+/// rebuilding the render resource.
 pub fn load_into_texture(target_path: &str, chain: &[Mip]) -> Result<LoadedTexture, TextureError> {
     if chain.is_empty() {
         return Err(TextureError::NoMips);
     }
+    validate_chain(chain).map_err(TextureError::InvalidInput)?;
     let tex = require_texture2d(target_path)?;
 
     let mips_at = mips_header_at(tex)?;

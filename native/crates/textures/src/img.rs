@@ -1,22 +1,64 @@
-//! Pure image pipeline: decode → fit (max dimension) → BGRA mip chain.
+//! Pure image pipeline: decode → fit → mip chain → optional BC1 encoding.
 //!
-//! Produces Engine-specific byte layout (`PF_A8R8G8B8` = B,G,R,A per pixel on little-endian)
-//! so the engine layer can copy the buffers unchanged.
+//! Produces engine-ready BGRA (`PF_A8R8G8B8`) or BC1 (`PF_DXT1`) payloads.
 
 use image::{DynamicImage, ImageFormat};
 
 use fast_image_resize as fir;
 use fir::images::{Image, ImageRef};
 
-/// One mip level in BGRA byte order (UE3 `PF_A8R8G8B8` memory layout).
+
+/// Storage encoding for generated mip payloads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Compression {
+    /// Uncompressed BGRA8, preserving full colour and alpha.
+    #[default]
+    None,
+    /// BC1/DXT1: eight bytes per 4x4 block, with one-bit alpha.
+    Bc1,
+}
+
+impl Compression {
+    /// Parse the public API spelling (case-insensitive).
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "none" => Ok(Self::None),
+            "bc1" | "dxt1" => Ok(Self::Bc1),
+            other => Err(format!(
+                "unknown compression '{other}' (want 'none', 'bc1' or 'dxt1')"
+            )),
+        }
+    }
+
+    /// Entry name in the engine's `EPixelFormat` enum.
+    pub fn pixel_format_name(self) -> &'static str {
+        match self {
+            Self::None => "PF_A8R8G8B8",
+            Self::Bc1 => "PF_DXT1",
+        }
+    }
+
+    /// Payload size for a mip, including complete BC1 blocks in tiny tails.
+    pub fn payload_size(self, width: u32, height: u32) -> usize {
+        let (w, h) = (width as usize, height as usize);
+        match self {
+            Self::None => w * h * 4,
+            Self::Bc1 => w.div_ceil(4) * h.div_ceil(4) * 8,
+        }
+    }
+}
+
+/// One mip level in an engine-ready encoding.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mip {
     /// Width in pixels.
     pub width: u32,
     /// Height in pixels.
     pub height: u32,
-    /// `BGRA8`, `width * height * 4` bytes.
-    pub bgra: Vec<u8>,
+    /// Encoding shared by every mip in the chain.
+    pub compression: Compression,
+    /// BGRA8 pixels or BC1 blocks, ready to copy to engine bulk data.
+    pub data: Vec<u8>,
 }
 
 /// A decoded RGBA8 image (straight alpha; JPEG decodes opaque).
@@ -73,7 +115,12 @@ pub fn fit(img: &Decoded, max_dim: u32) -> (Decoded, Vec<String>) {
     notes.push(format!(
         "resized {w}x{h} -> {tw}x{th} (larger than the {cap}px max dimension)"
     ));
-    let src = ImageRef::new(w, h, &img.rgba, fir::PixelType::U8x4)
+    (resize(img, tw, th), notes)
+}
+
+/// Resize a decoded image to exact dimensions (both must be nonzero).
+fn resize(img: &Decoded, tw: u32, th: u32) -> Decoded {
+    let src = ImageRef::new(img.width, img.height, &img.rgba, fir::PixelType::U8x4)
         .expect("rgba buffer matches dimensions");
     let mut dst = Image::new(tw, th, fir::PixelType::U8x4);
     let options = fir::ResizeOptions {
@@ -86,13 +133,26 @@ pub fn fit(img: &Decoded, max_dim: u32) -> (Decoded, Vec<String>) {
         .resize(&src, &mut dst, &options)
         .expect("sizes are non zero");
 
+    Decoded {
+        width: tw,
+        height: th,
+        rgba: dst.into_vec(),
+    }
+}
+
+/// Align BC1's top mip to full 4x4 blocks for D3D9 texture creation.
+/// Resizes (rather than padding) so existing UVs still cover the entire art.
+pub fn align_for_bc1(img: &Decoded) -> (Decoded, Vec<String>) {
+    let (w, h) = (img.width, img.height);
+    let (tw, th) = (w.div_ceil(4).max(1) * 4, h.div_ceil(4).max(1) * 4);
+    if (w, h) == (tw, th) {
+        return (img.clone(), Vec::new());
+    }
     (
-        Decoded {
-            width: tw,
-            height: th,
-            rgba: dst.into_vec(),
-        },
-        notes,
+        resize(img, tw, th),
+        vec![format!(
+            "resized {w}x{h} -> {tw}x{th} (BC1 requires a block-aligned top mip)"
+        )],
     )
 }
 
@@ -104,7 +164,8 @@ pub fn mip_chain(img: &Decoded, generate: bool) -> Vec<Mip> {
     let mut out = vec![Mip {
         width: img.width,
         height: img.height,
-        bgra: rgba_to_bgra(&img.rgba),
+        compression: Compression::None,
+        data: rgba_to_bgra(&img.rgba),
     }];
     if !generate {
         return out;
@@ -113,14 +174,61 @@ pub fn mip_chain(img: &Decoded, generate: bool) -> Vec<Mip> {
         if top.width <= 1 && top.height <= 1 {
             break;
         }
-        let (bgra, w, h) = halve_bgra(&top.bgra, top.width, top.height);
+        let (data, w, h) = halve_bgra(&top.data, top.width, top.height);
         out.push(Mip {
             width: w,
             height: h,
-            bgra,
+            compression: Compression::None,
+            data,
         });
     }
     out
+}
+
+/// Encode an uncompressed mip chain as BC1, discarding the BGRA buffers.
+/// Filtering happens before encoding, never on compressed blocks.
+pub fn compress_bc1(chain: &mut [Mip]) {
+    let format = texpresso::Format::Bc1;
+    for mip in chain {
+        let rgba = rgba_to_bgra(&mip.data); // the R/B swap is its own inverse
+        let (w, h) = (mip.width as usize, mip.height as usize);
+        let mut data = vec![0; format.compressed_size(w, h)];
+        format.compress(&rgba, w, h, texpresso::Params::default(), &mut data);
+        mip.data = data;
+        mip.compression = Compression::Bc1;
+    }
+}
+
+/// Validate payload sizes, encoding and mip geometry before engine allocation.
+pub fn validate_chain(chain: &[Mip]) -> Result<(), String> {
+    let Some(top) = chain.first() else {
+        return Err("empty mip chain".to_owned());
+    };
+    if top.compression == Compression::Bc1 && (top.width % 4 != 0 || top.height % 4 != 0) {
+        return Err("BC1 top mip dimensions must be multiples of four".to_owned());
+    }
+    let (mut w, mut h) = (top.width, top.height);
+    for (i, mip) in chain.iter().enumerate() {
+        if w == 0 || h == 0 || w > crate::DEFAULT_MAX_DIM || h > crate::DEFAULT_MAX_DIM {
+            return Err(format!("mip {i}: invalid dimensions {w}x{h}"));
+        }
+        if (mip.width, mip.height) != (w, h) || mip.compression != top.compression {
+            return Err(format!("mip {i}: inconsistent geometry or encoding"));
+        }
+        let expected = mip.compression.payload_size(w, h);
+        if mip.data.len() != expected {
+            return Err(format!(
+                "mip {i}: expected {expected} bytes, got {}",
+                mip.data.len()
+            ));
+        }
+        if w == 1 && h == 1 && i + 1 < chain.len() {
+            return Err("mip chain continues past 1x1".to_owned());
+        }
+        w = (w / 2).max(1);
+        h = (h / 2).max(1);
+    }
+    Ok(())
 }
 
 /// Flip the image vertically in place (row order — source-art orientation,

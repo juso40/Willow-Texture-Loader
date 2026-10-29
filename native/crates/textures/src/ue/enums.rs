@@ -4,6 +4,7 @@ use unrealsdk_rs::objects::{UEnumInfo, all_uenums, enum_names};
 use unrealsdk_rs::types::{UEnum, UObject};
 
 use crate::error::TextureError;
+use crate::img::Compression;
 
 /// The engine's pixel-format enum name.
 const ENUM_PIXEL_FORMAT: &str = "EPixelFormat";
@@ -14,13 +15,9 @@ const ENUM_TEXTURE_GROUP: &str = "TextureGroup";
 /// Class-scoped path: `Engine.Texture:<name>`.
 const PATH_CLASS_SCOPED: &str = "Engine.Texture:";
 
-/// BGRA-in-memory entry name.
-const BGRA_ENTRY: &str = "PF_A8R8G8B8";
-
-/// Resolve the BGRA pixel-format value from the engine's own `UEnum`.
-pub(crate) fn resolve_bgra_pixel_format() -> Result<u8, TextureError> {
-    let (enum_obj, source) = texture_enum(ENUM_PIXEL_FORMAT)?;
-    bgra_from_enum(enum_obj, &source)
+/// Resolve the payload's pixel-format value from the engine's own `UEnum`.
+pub(crate) fn resolve_pixel_format(compression: Compression) -> Result<u8, TextureError> {
+    resolve_entry(ENUM_PIXEL_FORMAT, compression.pixel_format_name())
 }
 
 /// Resolve a `TextureGroup` entry (the `LODGroup` value) from the engine's
@@ -89,17 +86,4 @@ fn short_names(names: &[String]) -> Vec<&str> {
         .iter()
         .map(|n| n.split_once('_').map_or(n.as_str(), |(_, rest)| rest))
         .collect()
-}
-
-/// BGRA index from a resolved `EPixelFormat` enum object.
-fn bgra_from_enum(enum_obj: *mut UObject, source: &str) -> Result<u8, TextureError> {
-    let names = enum_names(enum_obj as *const UEnum).ok_or_else(|| {
-        TextureError::Engine(format!("EPixelFormat enum ({source}) is unreadable"))
-    })?;
-    if let Some(idx) = names.iter().position(|n| n == BGRA_ENTRY) {
-        return Ok(idx as u8);
-    }
-    Err(TextureError::UnsupportedFormat(format!(
-        "no BGRA entry PF_A8R8G8B8 in EPixelFormat ({source}): {names:?}"
-    )))
 }

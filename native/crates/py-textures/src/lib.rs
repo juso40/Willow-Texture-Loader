@@ -33,12 +33,14 @@ fn make_opts(
     address_y: Option<String>,
     filter: Option<String>,
     lod_group: Option<String>,
+    compression: &str,
 ) -> PyResult<textures::CreateOptions> {
     Ok(textures::CreateOptions {
         name,
         outer,
         srgb,
         mips,
+        compression: parse_compression(compression)?,
         address_x: address(address_x)?,
         address_y: address(address_y)?,
         flip,
@@ -46,6 +48,11 @@ fn make_opts(
         filter: filter_mode(filter)?,
         lod_group,
     })
+}
+
+fn parse_compression(value: &str) -> PyResult<textures::Compression> {
+    textures::Compression::parse(value)
+        .map_err(|e| texture_error(textures::TextureError::InvalidInput(e)))
 }
 
 /// `None` → the default (`clamp`); otherwise the API spelling is parsed
@@ -79,12 +86,14 @@ fn filter_mode(value: Option<String>) -> PyResult<textures::FilterMode> {
 /// entry (`"ui"`, `"effects"`, …) resolved through the engine's own enum,
 /// `None` leaves the engine default; `flip` mirrors the source art
 /// vertically at load; `tiling` clears the engine's `bNoTiling` hint for
-/// wrap-style art. Images larger than 2048px in either dimension are
-/// downscaled (aspect-preserving) with a log note.
+/// wrap-style art. Images larger than 8192px in either dimension are
+/// downscaled (aspect-preserving) with a log note. `compression` defaults
+/// to `"none"` (BGRA), `"bc1"`/`"dxt1"` uploads lossy BC1 blocks with one-bit
+/// alpha and rounds top-mip dimensions up to multiples of four.
 #[allow(clippy::too_many_arguments)] // mirrors `load_image`'s keyword surface
 #[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(signature = (path, name, outer=None, mips=true, srgb=true, flip=false, tiling=false, address_x=None, address_y=None, filter=None, lod_group=None))]
+#[pyo3(signature = (path, name, outer=None, mips=true, srgb=true, flip=false, tiling=false, address_x=None, address_y=None, filter=None, lod_group=None, compression="none"))]
 pub fn load_image(
     path: &str,
     name: String,
@@ -97,11 +106,22 @@ pub fn load_image(
     address_y: Option<String>,
     filter: Option<String>,
     lod_group: Option<String>,
+    compression: &str,
 ) -> PyResult<String> {
     textures::load_image(
         path,
         &make_opts(
-             name, outer, mips, srgb, flip, tiling, address_x, address_y, filter, lod_group,
+            name,
+            outer,
+            mips,
+            srgb,
+            flip,
+            tiling,
+            address_x,
+            address_y,
+            filter,
+            lod_group,
+            compression,
         )?,
     )
     .map(|t| t.path)
@@ -112,7 +132,7 @@ pub fn load_image(
 #[allow(clippy::too_many_arguments)] // mirrors `load_image`'s keyword surface
 #[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(signature = (data, name, outer=None, mips=true, srgb=true, flip=false, tiling=false, address_x=None, address_y=None, filter=None, lod_group=None))]
+#[pyo3(signature = (data, name, outer=None, mips=true, srgb=true, flip=false, tiling=false, address_x=None, address_y=None, filter=None, lod_group=None, compression="none"))]
 pub fn load_image_bytes(
     data: Vec<u8>,
     name: String,
@@ -125,11 +145,22 @@ pub fn load_image_bytes(
     address_y: Option<String>,
     filter: Option<String>,
     lod_group: Option<String>,
+    compression: &str,
 ) -> PyResult<String> {
     textures::load_image_bytes(
         &data,
         &make_opts(
-            name, outer, mips, srgb, flip, tiling, address_x, address_y, filter, lod_group,
+            name,
+            outer,
+            mips,
+            srgb,
+            flip,
+            tiling,
+            address_x,
+            address_y,
+            filter,
+            lod_group,
+            compression,
         )?,
     )
     .map(|t| t.path)
@@ -138,12 +169,18 @@ pub fn load_image_bytes(
 
 /// Replaces an existing texture's content: decodes `path` (PNG or JPEG) and
 /// swaps it into the `Texture2D` at `target` (full object path).
-/// Always uploads BGRA (the target's format property may be changed).
+/// Uploads BGRA by default, or BC1/DXT1 with `compression="bc1"` (the
+/// target's format property is changed to match the payload).
 #[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(signature = (path, target, mips=true))]
-pub fn load_image_into(path: &str, target: &str, mips: bool) -> PyResult<String> {
-    textures::load_image_into(path, target, mips)
+#[pyo3(signature = (path, target, mips=true, compression="none"))]
+pub fn load_image_into(
+    path: &str,
+    target: &str,
+    mips: bool,
+    compression: &str,
+) -> PyResult<String> {
+    textures::load_image_into(path, target, mips, parse_compression(compression)?)
         .map(|t| t.path)
         .map_err(texture_error)
 }
@@ -151,9 +188,14 @@ pub fn load_image_into(path: &str, target: &str, mips: bool) -> PyResult<String>
 /// Like [`load_image_into`] for in-memory image bytes.
 #[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(signature = (data, target, mips=true))]
-pub fn load_image_bytes_into(data: Vec<u8>, target: &str, mips: bool) -> PyResult<String> {
-    textures::load_image_bytes_into(&data, target, mips)
+#[pyo3(signature = (data, target, mips=true, compression="none"))]
+pub fn load_image_bytes_into(
+    data: Vec<u8>,
+    target: &str,
+    mips: bool,
+    compression: &str,
+) -> PyResult<String> {
+    textures::load_image_bytes_into(&data, target, mips, parse_compression(compression)?)
         .map(|t| t.path)
         .map_err(texture_error)
 }

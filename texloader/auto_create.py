@@ -8,6 +8,7 @@ the defaults shown here::
 
     [texture]                   # optional; every key defaults
     mips = true
+    compression = "none"       # "none" | "bc1" ("dxt1" alias)
     flip = false
     srgb = true
     filter = "linear"           # "linear" | "nearest"
@@ -33,10 +34,11 @@ CREATE_TEXTURES = Path(__file__).parent / "create_textures"
 
 _ADDRESSES = ("wrap", "clamp", "mirror")
 _FILTERS = ("linear", "nearest")
+_COMPRESSIONS = ("none", "bc1", "dxt1")
 _BOOL_KEYS = ("mips", "flip", "srgb", "tiling")
 _TOP_LEVEL_KEYS = frozenset({"image", "name", "outer", "texture"})
 _TEXTURE_KEYS = frozenset(
-    {"mips", "flip", "srgb", "filter", "address", "address_x", "address_y", "tiling", "lod_group"},
+    {"mips", "compression", "flip", "srgb", "filter", "address", "address_x", "address_y", "tiling", "lod_group"},
 )
 
 
@@ -45,6 +47,7 @@ class TextureConfig:
     """The `[texture]`s optional configurations."""
 
     mips: bool = True
+    compression: str = "none"
     flip: bool = False
     srgb: bool = True
     filter: str = "linear"
@@ -102,6 +105,23 @@ def load_manifest(file: Path) -> TextureManifest | None:
     return manifest if not problems else None
 
 
+def load_from_manifest(path: str | Path) -> str:
+    """Create a `Texture2D` from a TOML manifest and return its object path.
+
+    Accepts manifests anywhere on disk, not just in `create_textures/`.
+    Relative image paths are resolved against the manifest's directory.
+    Resolve the result with `unrealsdk.find_object("Texture2D", path)`.
+
+    Raises `ValueError` for unreadable or invalid manifests (details are logged).
+    Image-loading and engine errors propagate to the caller.
+    """
+    file = Path(path).resolve()
+    manifest = load_manifest(file)
+    if manifest is None:
+        raise ValueError(f"Cannot load texture manifest: {file}")
+    return create_texture_for_manifest(manifest)
+
+
 def create_texture_for_manifest(manifest: TextureManifest) -> str:
     """Create the manifest's texture and return its object path.
 
@@ -116,6 +136,7 @@ def create_texture_for_manifest(manifest: TextureManifest) -> str:
         name=manifest.name,
         outer=manifest.outer,
         mips=cfg.mips,
+        compression=cfg.compression,
         srgb=cfg.srgb,
         filter=cfg.filter,
         lod_group=cfg.lod_group,
@@ -213,6 +234,7 @@ def _texture_values(raw: dict[str, Any], problems: list[str]) -> dict[str, Any]:
             else:
                 problems.append(f'[texture] "{key}" must be a boolean, got {raw[key]!r}')
     for key, choices in (
+        ("compression", _COMPRESSIONS),
         ("filter", _FILTERS),
         ("address", _ADDRESSES),
         ("address_x", _ADDRESSES),

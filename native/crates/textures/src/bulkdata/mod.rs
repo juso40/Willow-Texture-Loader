@@ -105,7 +105,7 @@ impl MipBlock {
     }
 
     /// Stamp the engine's own `UTexture2D::Init` mip state (bulk-data ctor +
-    /// `Realloc`) and copy `bgra` into `pixels`:
+    /// `Realloc`) and copy BGRA pixels or BC1 block `data` into `pixels`:
     ///
     /// ```text
     /// 0x00 vftable                  (copied from a live block)
@@ -125,12 +125,12 @@ impl MipBlock {
     ///
     /// # Safety
     /// Live mip block of [`Self::SIZE`] bytes; `pixels` is engine-heap
-    /// (`u_malloc`) memory of at least `bgra.len()` bytes.
+    /// (`u_malloc`) memory of at least `data.len()` bytes.
     pub unsafe fn init(
         &self,
         vtable: *mut c_void,
         pixels: *mut c_void,
-        bgra: &[u8],
+        data: &[u8],
         width: i32,
         height: i32,
     ) {
@@ -140,7 +140,7 @@ impl MipBlock {
         unsafe {
             write_ptr(b, Self::OFF_VTABLE, vtable);
             write_u32(b, Self::OFF_BULK_FLAGS, Self::INIT_BULK_FLAGS);
-            write_i32(b, Self::OFF_ELEMENT_COUNT, bgra.len() as i32);
+            write_i32(b, Self::OFF_ELEMENT_COUNT, data.len() as i32);
             write_i32(b, Self::OFF_FILE_OFFSET, Self::CTOR_SENTINEL);
             write_i32(b, Self::OFF_SIZE_ON_DISK, Self::CTOR_SENTINEL);
             write_u32(b, Self::OFF_SAVED_FLAGS, Self::INIT_BULK_FLAGS);
@@ -153,7 +153,7 @@ impl MipBlock {
             write_i32(b, Self::OFF_FREE_ON_EMPTY, Self::INIT_FREE_ON_EMPTY);
             write_i32(b, Self::OFF_SIZE_X, width);
             write_i32(b, Self::OFF_SIZE_Y, height);
-            std::ptr::copy_nonoverlapping(bgra.as_ptr(), pixels as *mut u8, bgra.len());
+            std::ptr::copy_nonoverlapping(data.as_ptr(), pixels as *mut u8, data.len());
         }
     }
 }

@@ -4,13 +4,14 @@
 pub mod bulkdata;
 pub mod img;
 
-
 mod error;
 mod names;
 mod texture;
 mod ue;
 
+
 pub use error::TextureError;
+pub use img::Compression;
 pub use names::sanitize_name;
 pub use texture::{AddressMode, CreateOptions, FilterMode, LoadedTexture};
 
@@ -18,7 +19,7 @@ pub use unrealsdk_rs::logging::install_log_bridge;
 
 /// Upper bound for either texture dimension.
 /// Larger sources are downscaled (aspect-preserving) and logged.
-pub const DEFAULT_MAX_DIM: u32 = 2048;
+pub const DEFAULT_MAX_DIM: u32 = 8192;
 
 /// Read an image file's bytes (shared by the file-based entry points).
 fn read_image_file(path: &str) -> Result<Vec<u8>, TextureError> {
@@ -28,16 +29,39 @@ fn read_image_file(path: &str) -> Result<Vec<u8>, TextureError> {
 /// Decode → fit → mip chain (shared by all load entry points), logging the
 /// fit notes. `flip` mirrors the source vertically before resizing (a
 /// create-path knob; swaps are pixels-only).
-fn prepare_chain(bytes: &[u8], mips: bool, flip: bool) -> Result<Vec<img::Mip>, TextureError> {
+fn prepare_chain(
+    bytes: &[u8],
+    mips: bool,
+    flip: bool,
+    compression: Compression,
+) -> Result<Vec<img::Mip>, TextureError> {
     let mut decoded = img::decode_rgba(bytes).map_err(TextureError::Image)?;
     if flip {
         img::flip_vertical(&mut decoded);
     }
-    let (fitted, notes) = img::fit(&decoded, DEFAULT_MAX_DIM);
+    let (mut fitted, mut notes) = img::fit(&decoded, DEFAULT_MAX_DIM);
+    if compression == Compression::Bc1 {
+        let (aligned, alignment_notes) = img::align_for_bc1(&fitted);
+        fitted = aligned;
+        notes.extend(alignment_notes);
+        if fitted
+            .rgba
+            .chunks_exact(4)
+            .any(|px| px[3] != 0 && px[3] != 255)
+        {
+            log::warn!(
+                "texloader: BC1 has one-bit alpha; smooth transparency will be lost (use compression='none' to preserve it)"
+            );
+        }
+    }
     for note in &notes {
         log::info!("texloader: {note}");
     }
-    Ok(img::mip_chain(&fitted, mips))
+    let mut chain = img::mip_chain(&fitted, mips);
+    if compression == Compression::Bc1 {
+        img::compress_bc1(&mut chain);
+    }
+    Ok(chain)
 }
 
 /// Load an image file as a **new** `Texture2D`. Returns the full object path.
@@ -53,7 +77,7 @@ pub fn load_image_bytes(bytes: &[u8], opts: &CreateOptions) -> Result<LoadedText
             "a texture name is required (opts.name)".to_owned(),
         ));
     }
-    let chain = prepare_chain(bytes, opts.mips, opts.flip)?;
+    let chain = prepare_chain(bytes, opts.mips, opts.flip, opts.compression)?;
     texture::create_texture(opts, &chain)
 }
 
@@ -63,9 +87,10 @@ pub fn load_image_into(
     path: &str,
     target: &str,
     mips: bool,
+    compression: Compression,
 ) -> Result<LoadedTexture, TextureError> {
     let bytes = read_image_file(path)?;
-    load_image_bytes_into(&bytes, target, mips)
+    load_image_bytes_into(&bytes, target, mips, compression)
 }
 
 /// Replace the mip chain of an **existing** texture with in-memory image
@@ -74,13 +99,14 @@ pub fn load_image_bytes_into(
     bytes: &[u8],
     target: &str,
     mips: bool,
+    compression: Compression,
 ) -> Result<LoadedTexture, TextureError> {
     if target.trim().is_empty() {
         return Err(TextureError::InvalidInput(
             "a target texture path is required".to_owned(),
         ));
     }
-    let chain = prepare_chain(bytes, mips, false)?;
+    let chain = prepare_chain(bytes, mips, false, compression)?;
     texture::load_into_texture(target, &chain)
 }
 

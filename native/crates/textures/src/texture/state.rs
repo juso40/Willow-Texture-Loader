@@ -5,7 +5,7 @@ use unrealsdk_rs::set;
 
 use crate::error::TextureError;
 use crate::img::Mip;
-use crate::ue::enums::resolve_bgra_pixel_format;
+use crate::ue::enums::resolve_pixel_format;
 use crate::ue::props::{optional_set, prop, set_prop_if_present};
 
 use crate::ue::flags::{TMGS_LEAVE_EXISTING_MIPS, TMGS_NO_MIPMAPS};
@@ -24,7 +24,7 @@ pub(crate) fn apply_common_state(
     let full = &chain[0];
     set_prop_if_present(tex, prop::SIZE_X, full.width as i32);
     set_prop_if_present(tex, prop::SIZE_Y, full.height as i32);
-    set_prop_if_present(tex, prop::FORMAT, resolve_bgra_pixel_format()?);
+    set_prop_if_present(tex, prop::FORMAT, resolve_pixel_format(full.compression)?);
     // Probe evidence: the engine's textures put the tail one past the last
     // full-size mip (6 mips → MipTailBaseIdx 5, 8 → 7).
     set_prop_if_present(tex, prop::MIP_TAIL_BASE_IDX, chain.len() as i32 - 1);
@@ -69,7 +69,7 @@ pub(crate) fn apply_creation_state(
 ///   `CompressionNoAlpha` + `CompressionNone` on, `DeferCompression` off —
 ///   and they keep
 ///   `PostEditChangeProperty`'s per-property fixups from treating the fresh
-///   BGRA as compressible source art (the game ships NVTT and will happily
+///   BGRA or already-encoded BC1 as compressible source art (the game ships NVTT and will happily
 ///   recompress). `CompressionSettings` is deliberately left alone.
 /// - `MipGenSettings` documents that the chain is ours:
 ///   [`TMGS_NO_MIPMAPS`] for a single mip, [`TMGS_LEAVE_EXISTING_MIPS`] when
