@@ -1,13 +1,9 @@
 [workspace]
 resolver = "3"
-members = [
-    "crates/py-textures",
-    "crates/textures",
-    "crates/texloader",
-]
+members = ["crates/py-textures", "crates/textures", "crates/texloader"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/juso40/texloader"
@@ -20,9 +16,13 @@ textures = { path = "crates/textures" }
 texloader = { path = "crates/texloader" }
 pyo3 = "0.29"
 log = { version = "0.4", features = ["std"] }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+] }
 fast_image_resize = { version = "6.1.0", features = ["only_u8x4", "image"] }
-texpresso = "2.0"
+# Parallelize BC1 block rows within each individual mip/image.
+texpresso = { version = "2.0", features = ["rayon"] }
 [workspace.lints.rust]
 missing_docs = "warn"
 unsafe_op_in_unsafe_fn = "warn"

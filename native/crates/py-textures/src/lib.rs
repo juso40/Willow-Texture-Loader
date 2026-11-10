@@ -1,6 +1,6 @@
 //! The Python-facing texture surface of the `texloader._texloader` module.
 //!
-//! Mod authors load PNG/JPEG files (or raw bytes) as real UE3 `Texture2D`
+//! Mod authors load PNG/JPEG or BC1 DDS files (or bytes) as real UE3 `Texture2D`
 //! objects and resolve them with the SDK they already have:
 //!
 //! ```python
@@ -73,7 +73,7 @@ fn filter_mode(value: Option<String>) -> PyResult<textures::FilterMode> {
     }
 }
 
-/// Loads an image file (PNG or JPEG) as a new `Texture2D` and returns its
+/// Loads PNG, JPEG, or BC1 DDS as a new `Texture2D` and returns its
 /// full object path (e.g. `"Transient.MyMod.logo"` — resolve it with
 /// `unrealsdk.find_object("Texture2D", path)`). `name` is required. `outer`
 /// optionally names an existing object to construct under (e.g. a `Package`),
@@ -86,10 +86,16 @@ fn filter_mode(value: Option<String>) -> PyResult<textures::FilterMode> {
 /// entry (`"ui"`, `"effects"`, …) resolved through the engine's own enum,
 /// `None` leaves the engine default; `flip` mirrors the source art
 /// vertically at load; `tiling` clears the engine's `bNoTiling` hint for
-/// wrap-style art. Images larger than 8192px in either dimension are
-/// downscaled (aspect-preserving) with a log note. `compression` defaults
-/// to `"none"` (BGRA), `"bc1"`/`"dxt1"` uploads lossy BC1 blocks with one-bit
-/// alpha and rounds top-mip dimensions up to multiples of four.
+/// wrap-style art. PNG/JPEG images larger than 8192px in either dimension
+/// are downscaled (aspect-preserving) with a log note. `compression` defaults
+/// to `"none"` (BGRA). `"bc1"`/`"dxt1"` encodes PNG/JPEG to lossy BC1 blocks
+/// with one-bit alpha and rounds top-mip dimensions up to multiples of four.
+/// DDS is detected by magic and retains its existing BC1 blocks regardless
+/// of `compression`, with no decoding or recompression. Legacy DXT1 and DX10
+/// BC1_UNORM/BC1_UNORM_SRGB single 2D textures are supported. `mips=true`
+/// reuses stored DDS mips (does not generate missing ones). False uses mip 0.
+/// DDS requires `flip=false` and block-aligned dimensions at most 8192px.
+/// `srgb` controls colour space even for DX10 sRGB DDS headers.
 #[allow(clippy::too_many_arguments)] // mirrors `load_image`'s keyword surface
 #[gen_stub_pyfunction]
 #[pyfunction]
@@ -128,7 +134,7 @@ pub fn load_image(
     .map_err(texture_error)
 }
 
-/// Like [`load_image`] for in-memory image bytes (PNG or JPEG).
+/// Like [`load_image`] for in-memory PNG, JPEG, or BC1 DDS bytes.
 #[allow(clippy::too_many_arguments)] // mirrors `load_image`'s keyword surface
 #[gen_stub_pyfunction]
 #[pyfunction]
@@ -167,10 +173,12 @@ pub fn load_image_bytes(
     .map_err(texture_error)
 }
 
-/// Replaces an existing texture's content: decodes `path` (PNG or JPEG) and
-/// swaps it into the `Texture2D` at `target` (full object path).
-/// Uploads BGRA by default, or BC1/DXT1 with `compression="bc1"` (the
-/// target's format property is changed to match the payload).
+/// Replaces an existing texture's content from PNG, JPEG, or BC1 DDS at
+/// `path`, uploading to the `Texture2D` at `target` (full object path).
+/// PNG/JPEG uploads BGRA by default, or BC1 with `compression="bc1"`.
+/// DDS directly uploads its stored BC1 blocks regardless of `compression`.
+/// `mips=true` reuses stored DDS mips; false selects only mip 0.
+/// The target's format property is changed to match the payload.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(signature = (path, target, mips=true, compression="none"))]

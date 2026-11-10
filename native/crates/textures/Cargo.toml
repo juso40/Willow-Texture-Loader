@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# Runtime texture loading for the game: decode PNG/JPEG, build a BGRA/BC1 mip
-# chain in pure Rust (unit-tested off-game), then build/patch a UE3
-# `Texture2D` through `unrealsdk-rs` on the game thread. Python-free — the
-# pyo3 surface lives in `py-textures`, like every other crate here.
+# Runtime texture loading: decode PNG/JPEG to BGRA/BC1 or reuse BC1 DDS mips
+# in pure Rust, then build/patch a UE3 `Texture2D` through `unrealsdk-rs`
+# on the game thread.
+# The pyo3 surface lives in `py-textures`.
 
 [dependencies]
 unrealsdk-rs.workspace = true
@@ -15,6 +15,9 @@ log.workspace = true
 image.workspace = true
 fast_image_resize.workspace = true
 texpresso.workspace = true
+
+[dev-dependencies]
+rayon = "1"
 
 [lints]
 workspace = true

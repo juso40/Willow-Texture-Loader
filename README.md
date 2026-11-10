@@ -1,6 +1,6 @@
 # texloader
-Runtime texture loading for **Borderlands 2**: import arbitrary PNG/JPEG
-images as real, game-ready `Texture2D` objects.
+Runtime texture loading for **Borderlands 2**: import PNG/JPEG images and
+pre-encoded BC1 DDS textures as real, game-ready `Texture2D` objects.
 
 A [pyunrealsdk](https://bl-sdk.github.io/willow2-mod-db/) mod.
 
@@ -25,7 +25,7 @@ Both builds always use release mode; there are no parameters.
 
 ### For `blcm` Modders
 You can use `texloader` by using its provided autocreate feature.  
-texloader will automatically create a `Texture2D` object for any PNG/JPEG image you provide it (with the respective manifest entries).   
+texloader will automatically create a `Texture2D` object for any PNG/JPEG image or BC1 DDS texture you provide it (with the respective manifest entries).
 For that simply place the images you want to use into the `texloader/create_textures` folder.
 
 You can also add any amount of subfolders to the `create_textures` folder. These will be scanned recursively for any `.toml` files.
@@ -133,3 +133,45 @@ Trade-offs:
   at least one complete eight-byte block.
 - Compression adds one-time CPU work when loading. The resulting texture stays
   compressed while resident in the engine.
+
+### Pre-encoded BC1 DDS (faster loading)
+
+For textures you ship with a mod, encode them to **BC1/DXT1 DDS** ahead of time
+using an exporter such as DirectXTex's `texconv`. Include mipmaps when exporting if you want them in-game.
+For example, with DirectXTex:
+
+```sh
+texconv -f BC1_UNORM -m 0 image.png
+```
+
+Then load the resulting DDS with the same API:
+
+```python
+from texloader import load
+
+texture_path = load("/absolute/path/to/image.dds")
+```
+
+Or point your existing TOML manifest at it:
+
+```toml
+image = "image.dds"
+name = "image"
+
+[texture]
+mips = true
+```
+
+`load_from_manifest`, the automatic manifest scan, `load_bytes`, `load_into`, and
+`load_bytes_into` all support BC1 DDS. 
+
+
+DDS rules:
+- Supports legacy `DXT1` DDS and DX10 `BC1_UNORM` / `BC1_UNORM_SRGB` DDS.
+- Dimensions must already be divisible by four (minimum 4x4) and no larger than 8192x8192. 
+- `mips = true` reuses **all stored mip levels**, including partial chains or a single level. Missing mipmaps are not generated. `mips = false` uploads only mip 0.
+- DDS always stays BC1. The `compression` option only selects encoding for
+  PNG/JPEG and does not decompress DDS, even when it is `"none"` (the default).
+- `flip = true` is rejected for DDS. Flip the source before exporting instead.
+- The API/manifest `srgb` option controls colour space, even for a DX10 sRGB
+  DDS header. Set `srgb = false` for linear-data textures.

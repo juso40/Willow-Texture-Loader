@@ -76,7 +76,7 @@ def load(  # noqa: PLR0913
     lod_group: str | None = None,
     compression: str = "none",
 ) -> str:
-    """Load an image file (PNG or JPEG) as a new `Texture2D`.
+    """Load PNG, JPEG, or pre-encoded BC1 DDS as a new `Texture2D`.
 
     Returns the full object path, resolve it with
     `unrealsdk.find_object("Texture2D", path)`.
@@ -84,9 +84,10 @@ def load(  # noqa: PLR0913
     - `name`: the object name (`"logo"`).
     - `outer`: object (or path) to use as the outer object, defaults to `Transient`
       (-> `Transient.<name>`).
-    - `mips`: generate the full mip chain (leave on unless you know the
-      consumer only samples mip 0).
-    - `srgb`: interpret the image as sRGB (used for albedo/UI art).
+    - `mips`: generate the full mip chain for PNG/JPEG, or reuse all stored
+      DDS mips. `False` uploads only mip 0. Missing DDS mips are not generated.
+    - `srgb`: interpret the image as sRGB (used for albedo/UI art). This
+      option controls colour space even for DDS with a DX10 sRGB header.
     - `address`: edge addressing - `"wrap"`, `"clamp"` (default) or
       `"mirror"`. `address_x`/`address_y` override one axis (the engine
       keeps `AddressX`/`AddressY` separate).
@@ -102,7 +103,13 @@ def load(  # noqa: PLR0913
       block (about 8x smaller than BGRA). Top-mip dimensions are rounded
       up to multiples of four with a resize note. Use `"none"` for smooth alpha.
 
-    Sources larger than 8192px in either dimension are downscaled
+    DDS is detected from its file contents. Legacy DXT1 and DX10 BC1_UNORM /
+    BC1_UNORM_SRGB single 2D textures are supported. Stored blocks are copied
+    directly, without decoding or recompression, regardless of `compression`.
+    DDS requires `flip=False`, dimensions divisible by four and at most 8192px.
+    Incompatible DDS files are rejected rather than converted at load time.
+
+    PNG/JPEG sources larger than 8192px in either dimension are downscaled
     (aspect-preserving) with a log note.
     Textures are GC immune, call `unload` to release one.
     """
@@ -139,7 +146,7 @@ def load_bytes(  # noqa: PLR0913
     lod_group: str | None = None,
     compression: str = "none",
 ) -> str:
-    """Like `load` but for in-memory image bytes (PNG or JPEG)."""
+    """Like `load` but for in-memory PNG, JPEG, or BC1 DDS bytes."""
     axis_x, axis_y = _resolve_address(address, address_x, address_y)
     return _texloader.load_image_bytes(
         data,
@@ -168,8 +175,9 @@ def load_into(
 
     `target` is the games texture itself or its full object path.
     Materials referencing the texture may need rebinding.
-    `compression` uses the same options as `load`; the target's pixel
-    format is changed to match the uploaded data.
+    PNG, JPEG, and BC1 DDS are supported, with the same `mips` and
+    `compression` behaviour as `load`. DDS keeps its stored BC1 blocks.
+    The target's pixel format is changed to match the uploaded data.
     """
     return _texloader.load_image_into(str(path), _object_path(target), mips, compression)
 

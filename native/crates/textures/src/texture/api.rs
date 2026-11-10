@@ -121,9 +121,11 @@ pub struct CreateOptions {
     pub outer: Option<String>,
     /// Mark the texture sRGB.
     pub srgb: bool,
-    /// Generate a full mip chain (else a single mip).
+    /// Generate a full mip chain for PNG/JPEG; reuse stored levels for DDS.
+    /// False selects only the top mip in either case.
     pub mips: bool,
-    /// Mip storage: uncompressed BGRA (default) or BC1/DXT1.
+    /// PNG/JPEG storage: uncompressed BGRA (default) or BC1/DXT1.
+    /// Pre-encoded DDS retains its own BC1 format regardless of this option.
     pub compression: Compression,
     /// Edge addressing of the X axis (`AddressX`).
     pub address_x: AddressMode,
@@ -192,11 +194,6 @@ pub fn create_texture(opts: &CreateOptions, chain: &[Mip]) -> Result<LoadedTextu
         return Err(TextureError::NoMips);
     }
     validate_chain(chain).map_err(TextureError::InvalidInput)?;
-    if chain[0].compression != opts.compression {
-        return Err(TextureError::InvalidInput(
-            "mip encoding does not match creation options".to_owned(),
-        ));
-    }
     let cls = texture2d_class()?;
 
     // Resolve the CreationOptions settings: a bad value fails the call

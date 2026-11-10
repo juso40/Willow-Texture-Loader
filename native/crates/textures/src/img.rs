@@ -7,7 +7,6 @@ use image::{DynamicImage, ImageFormat};
 use fast_image_resize as fir;
 use fir::images::{Image, ImageRef};
 
-
 /// Storage encoding for generated mip payloads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Compression {
@@ -187,6 +186,9 @@ pub fn mip_chain(img: &Decoded, generate: bool) -> Vec<Mip> {
 
 /// Encode an uncompressed mip chain as BC1, discarding the BGRA buffers.
 /// Filtering happens before encoding, never on compressed blocks.
+/// Texpresso's Rayon feature parallelizes block rows inside each mip.
+/// mips are processed in sequence to avoid extra full-image temporary buffers.
+/// No engine calls occur on the compression workers.
 pub fn compress_bc1(chain: &mut [Mip]) {
     let format = texpresso::Format::Bc1;
     for mip in chain {

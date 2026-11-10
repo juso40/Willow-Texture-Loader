@@ -1,9 +1,10 @@
-//! textures: load arbitrary PNG/JPEG images
+//! textures: load PNG/JPEG images and pre-encoded BC1 DDS textures
 //! into UE3 `Texture2D` objects at runtime.
 
 pub mod bulkdata;
 pub mod img;
 
+mod dds;
 mod error;
 mod names;
 mod texture;
@@ -18,7 +19,8 @@ pub use texture::{AddressMode, CreateOptions, FilterMode, LoadedTexture};
 pub use unrealsdk_rs::logging::install_log_bridge;
 
 /// Upper bound for either texture dimension.
-/// Larger sources are downscaled (aspect-preserving) and logged.
+/// Larger PNG/JPEG sources are downscaled (aspect-preserving) and logged.
+/// DDS sources must fit the cap already; they are never decoded or resized.
 pub const DEFAULT_MAX_DIM: u32 = 8192;
 
 /// Read an image file's bytes (shared by the file-based entry points).
@@ -26,15 +28,23 @@ fn read_image_file(path: &str) -> Result<Vec<u8>, TextureError> {
     std::fs::read(path).map_err(|e| TextureError::Io(format!("failed to read '{path}': {e}")))
 }
 
-/// Decode → fit → mip chain (shared by all load entry points), logging the
-/// fit notes. `flip` mirrors the source vertically before resizing (a
-/// create-path knob; swaps are pixels-only).
+/// DDS: validate and copy stored BC1 blocks. PNG/JPEG: decode → fit → mip
+/// chain → optional compression, logging fit notes. `flip` is only supported
+/// for decoded images; DDS stays on the no-decode, no-recompression path.
 fn prepare_chain(
     bytes: &[u8],
     mips: bool,
     flip: bool,
     compression: Compression,
 ) -> Result<Vec<img::Mip>, TextureError> {
+    if bytes.starts_with(b"DDS ") {
+        if flip {
+            return Err(TextureError::InvalidInput(
+                "flip=true is not supported for pre-encoded DDS; flip the image before exporting DDS".to_owned(),
+            ));
+        }
+        return dds::load_bc1(bytes, mips).map_err(TextureError::Image);
+    }
     let mut decoded = img::decode_rgba(bytes).map_err(TextureError::Image)?;
     if flip {
         img::flip_vertical(&mut decoded);
@@ -70,7 +80,8 @@ pub fn load_image(path: &str, opts: &CreateOptions) -> Result<LoadedTexture, Tex
     load_image_bytes(&bytes, opts)
 }
 
-/// Load in-memory image bytes (PNG or JPEG) as a **new** `Texture2D`.
+/// Load in-memory PNG/JPEG or BC1 DDS bytes as a **new** `Texture2D`.
+/// DDS preserves its BC1 encoding regardless of `opts.compression`.
 pub fn load_image_bytes(bytes: &[u8], opts: &CreateOptions) -> Result<LoadedTexture, TextureError> {
     if opts.name.trim().is_empty() {
         return Err(TextureError::InvalidInput(

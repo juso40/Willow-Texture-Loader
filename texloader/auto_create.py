@@ -3,12 +3,12 @@
 Manifest schema: only `image` and `name` are required, everything else falls back to
 the defaults shown here::
 
-    image = "logo.png"          # required, relative to the manifest
+    image = "logo.png"          # required, relative to the manifest (PNG/JPEG/BC1 DDS)
     name = "MyMod.logo"         # required; bare name -> Transient.<name>
 
     [texture]                   # optional; every key defaults
-    mips = true
-    compression = "none"       # "none" | "bc1" ("dxt1" alias)
+    mips = true                 # generate for PNG/JPEG - reuse stored DDS mips
+    compression = "none"        # "none" | "bc1" ("dxt1" alias). DDS stays BC1
     flip = false
     srgb = true
     filter = "linear"           # "linear" | "nearest"
@@ -18,6 +18,8 @@ the defaults shown here::
     tiling = false
     lod_group = "ui"            # any Engine.Texture:TextureGroup ("ui", "world", "effects", ...)
 
+BC1 DDS images upload their existing blocks without decoding or recompression.
+DDS requires flip = false and block-aligned dimensions no larger than 8192px.
 Unknown keys, wrong types or bad values are an error that skips the manifest.
 """
 
